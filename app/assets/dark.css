@@ -1,0 +1,97 @@
+/* Full-page background for Gradio */
+body, html, .gradio-container {
+    background-color: #0c0c0f !important;
+}
+
+/* Force all inner Gradio containers to adopt dark background */
+.gradio-container,
+.gr-block,
+.gr-panel,
+.gr-box,
+.gradio-interface,
+.gradio-tabs,
+.gr-tabitem {
+    background-color: #0c0c0f !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* Header */
+.sense-header {
+    color: white;
+    font-size: 32px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Quote bubble */
+.quote-bubble {
+    background: #e8c8ff;
+    color: black;
+    padding: 15px;
+    border-radius: 50px;
+    text-align: center;
+    width: 60%;
+    margin: 0 auto;
+    font-size: 18px;
+}
+
+/* KPI cards */
+.kpi-box {
+    background: #d8b7ff;
+    padding: 20px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+    color: black;
+    font-size: 18px;
+    text-align: center;
+}
+
+/* Next Task banner */
+.next-task {
+    background: #e3c2ff;
+    padding: 25px;
+    border-radius: 25px;
+    margin-top: 25px;
+    text-align: center;
+    font-size: 20px;
+}
+
+/* Navigation Buttons */
+.nav-btn {
+    background: #dcb8ff !important;
+    color: black !important;
+    border-radius: 50px !important;
+    padding: 14px !important;
+    font-size: 16px !important;
+    border: none !important;
+}
+.motivation-title {
+    color: #ffb7ff;
+    font-size: 32px;
+    text-align: center;
+    margin-top: 20px;
+    font-weight: bold;
+}
+
+.motivation-quote {
+    color: white;
+    text-align: center;
+    font-size: 20px;
+    margin: 20px 0;
+}
+
+.deadline-title {
+    color: #d8b7ff;
+    font-size: 22px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    text-align: left;
+    font-weight: bold;
+}
+
+.deadline-list {
+    color: white;
+    font-size: 18px;
+    margin-top: 15px;
+}
