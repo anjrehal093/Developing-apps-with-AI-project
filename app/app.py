@@ -1,109 +1,85 @@
+
+
+
 import gradio as gr
-from prompts import QUOTE_PROMPT
-
-# -------------------------
-# Custom CSS (matches your image)
-# -------------------------
-
-custom_css = """
-/* Page background */
-body { 
-    background-color: #0c0c0f !important; 
-}
-
-/* Header */
-.sense-header {
-    color: white;
-    font-size: 32px;
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-/* Quote bubble */
-.quote-bubble {
-    background: #e8c8ff;
-    color: black;
-    padding: 15px;
-    border-radius: 50px;
-    text-align: center;
-    width: 60%;
-    margin: 0 auto;
-    font-size: 18px;
-}
-
-/* KPI cards */
-.kpi-box {
-    background: #d8b7ff;
-    padding: 20px;
-    border-radius: 20px;
-    margin-bottom: 12px;
-    color: black;
-    font-size: 18px;
-    text-align: center;
-}
-
-/* Next Task banner */
-.next-task {
-    background: #e3c2ff;
-    padding: 25px;
-    border-radius: 25px;
-    margin-top: 25px;
-    text-align: center;
-    font-size: 20px;
-}
-
-/* Navigation Buttons */
-.nav-btn {
-    background: #dcb8ff !important;
-    color: black !important;
-    border-radius: 50px !important;
-    padding: 14px !important;
-    font-size: 16px !important;
-    border: none !important;
-}
-"""
-
-
-# -------------------------
-# Dashboard placeholder loader
-# -------------------------
+import os
 from backend import (
+    generate_study_plan,
+    generate_quote,
+    save_study_plan,
     generate_quick_insights,
-    extract_next_task,
     load_study_plan,
-    load_habit_data
+    load_habit_data,
+    log_study_session,
+    calculate_total_hours,
+    calculate_streak,
+    generate_weekly_summary,
+    complete_current_task
 )
+from calendar_module import calendar_tab
+
+
+
 
 
 def load_dashboard():
-    # Quote
-    quote = "✨ " + generate_quick_insights().split("\n")[0]  # temporary until quote function made
+        logs = load_habit_data()
 
-    # Hours studied
-    logs = load_habit_data()
-    total_hours = sum(log["hours"] for log in logs)
+        # ---- KPIs ----
+        total_hours = calculate_total_hours(logs) if logs else 0
+        streak = calculate_streak(logs) if logs else 0
 
-    # Streak (you will add calculate_streak() later)
-    streak = len(logs)
+        
+        quote = generate_quote()
+        quote_html = f"<div class='quote-bubble'>Stay consistent</div>"
+        hours_html = f"<div class='kpi-box'>Hours Studied<br><b>{total_hours}</b></div>"
+        streak_html = f"<div class='kpi-box'>Study Streak<br><b>{streak} days</b></div>"
 
-    # Next task
-    plan = load_study_plan()
-    if plan:
-        next_task = extract_next_task(plan)
-    else:
-        next_task = "No study plan yet."
+        plan_data = load_study_plan()
 
-    return quote, f"{total_hours} hours", f"{streak} days", next_task
+        if plan_data:
+            next_task = plan_data.get("next_task")
+            task_html = (
+                f"<div class='next-task'>"
+                f" Your next task:<br><b>{next_task}</b>"
+                f"</div>"
+            )
+        else:
+            task_html = (
+                "<div class='next-task'>"
+                "Generate a study plan to see your next task"
+                "</div>"
+            )
 
 
+        return quote_html, hours_html, streak_html, task_html
 # -------------------------
 # App Layout
 # -------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-with gr.Blocks(css=custom_css) as demo:
+def load_css(theme):
+    filename = "dark.css" if theme == "Dark" else "light.css"
+    css_path = os.path.join(BASE_DIR, "assets", filename)
+    with open(css_path, "r", encoding="utf-8") as f:
+        return f.read()
 
+dark_css = load_css("Dark")
+light_css = load_css("Light")
+
+def switch_theme(choice):
+    css = light_css if choice == "Light" else dark_css
+    return f"<style>{css}</style>"
+
+
+
+with gr.Blocks() as demo:
+    css_box = gr.HTML(f"<style>{dark_css}</style>")
+
+    theme_state = gr.State("Dark")
     with gr.Tabs():
-
+        
+ 
         # -----------------------------------------
         # HOME TAB
         # -----------------------------------------
@@ -114,6 +90,17 @@ with gr.Blocks(css=custom_css) as demo:
 
             # Quote bubble
             quote_box = gr.Markdown("<div class='quote-bubble'> Quote loading...</div>")
+            
+           
+            theme_toggle = gr.Radio(
+            ["Dark", "Light"],
+            value="Dark",
+            label="Theme",
+            elem_classes="theme-toggle"
+        )
+            
+          
+
 
             # KPI + Donut layout
             with gr.Row():
@@ -129,7 +116,7 @@ with gr.Blocks(css=custom_css) as demo:
                         "<div style='color:white; font-size:20px; margin-bottom:10px;'>Progress Donut</div>"
                     )
                     donut_placeholder = gr.Markdown(
-                        "<div style='color:white;'>🍩 Donut chart will appear here (Tasks Completed vs Tasks Left)</div>"
+                        "<div style='color:white;'> Donut chart will appear here (Tasks Completed vs Tasks Left)</div>"
                     )
 
             # NEXT TASK BOX
@@ -142,37 +129,160 @@ with gr.Blocks(css=custom_css) as demo:
 
             with gr.Row():
                 planner_btn = gr.Button("📘 Generate Study Plan", elem_classes="nav-btn")
-                calendar_btn = gr.Button("📅 Calendar (optional)", elem_classes="nav-btn")
+                calendar_btn = gr.Button("📅 Calendar ", elem_classes="nav-btn")
                 tracker_btn = gr.Button("📝 Log Studies", elem_classes="nav-btn")
+                complete_task_btn = gr.Button("✅ Complete Task")
+                complete_task_btn.click(
+                    fn=complete_current_task,
+                    inputs=None,
+                    outputs=next_task_box
+                )
 
+
+                refresh_dashboard_btn = gr.Button("🔄 Refresh Dashboard", elem_classes="nav-btn")
+                refresh_dashboard_btn.click(
+                fn=load_dashboard,
+                inputs=None,
+                outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
+            )
+
+                quote_btn = gr.Button("🔄 Refresh Quote", elem_classes="nav-btn")
+                quote_btn.click(
+                fn=lambda: f"<div class='quote-bubble'>{generate_quote()}</div>",
+                inputs=None,
+                outputs=quote_box
+)
+       
+        
         # -----------------------------------------
         # OTHER TABS (unchanged)
         # -----------------------------------------
         with gr.Tab("Study Planner"):
-            tasks_input = gr.Textbox(label="Tasks")
+
+            gr.Markdown("<div class='planner-title'>STUDY PLANNER</div>")
+
+            # ---- Add Task UI ----
+            new_task = gr.Textbox(label="Add a Task")
+            add_task_btn = gr.Button("➕ Add Task", elem_classes="nav-btn")
+
+            # This holds the tasks internally
+            task_list_state = gr.State([])
+
+            # Where tasks will be shown on screen
+            task_list_display = gr.Markdown("<div class='task-list'>No tasks added yet.</div>")
+
+            # ---- Function to update tasks ----
+            def add_task(task, task_list):
+                if not task.strip():
+                    return task_list, "<div class='task-list'>Enter a task first.</div>", ""
+
+                new_list = (task_list or []) + [task.strip()]
+
+                html = "<div class='task-list'><ul>"
+                for t in new_list:
+                    html += f"<li>{t}</li>"
+                html += "</ul></div>"
+
+                return new_list, html, ""
+
+            add_task_btn.click(
+                fn=add_task,
+                inputs=[new_task, task_list_state],
+                outputs=[task_list_state, task_list_display,new_task]
+            )
+
+            # ---- Study plan options ----
             time_input = gr.Slider(1, 8, label="Available Hours")
             difficulty = gr.Dropdown(["Easy", "Medium", "Hard"])
             style = gr.Dropdown(["Pomodoro", "Deep Work", "Short Sessions"])
+             # ---- Deadline Input Section ----
+            gr.Markdown("<div class='deadline-title'>ADD A DEADLINE</div>")
 
-            generate_btn = gr.Button("Generate Plan")
+            deadline_name = gr.Textbox(label="Deadline Name (e.g., Maths Exam)")
+            deadline_date = gr.Textbox(label="Deadline Date (YYYY-MM-DD HH:MM)")
+
+            add_deadline_btn = gr.Button("➕ Add Deadline", elem_classes="nav-btn")
+
+            generate_btn = gr.Button("Generate Plan", elem_classes="nav-btn")
             plan_output = gr.Markdown()
+
+            # Function to combine tasks for the LLM (later)
+            def prepare_plan(task_list, hours, diff, style, deadline):
+                if not task_list:
+                    return " Add at least 1 task before generating a plan."
+
+                tasks_joined = "\n".join(task_list)
+
+                try:
+                    plan = generate_study_plan(tasks_joined, hours, diff, style)
+                except Exception as e:
+                    print("LLM ERROR:", e)
+                    plan = " AI plan generation failed. Tasks saved anyway."
+
+                save_study_plan(plan, task_list,deadline)
+                return plan
+            generate_btn.click(
+                fn=prepare_plan,
+                inputs=[task_list_state, time_input, difficulty, style, deadline_date],
+                outputs=plan_output
+            ).then(
+                fn=load_dashboard,
+                inputs=None,
+                outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
+            )
+
 
         with gr.Tab("Habit Tracker"):
             hours_input = gr.Slider(0, 6, label="Hours Studied")
             tasks_completed = gr.Slider(0, 10, label="Tasks Completed")
             log_btn = gr.Button("Log Session")
             log_output = gr.Markdown()
+            log_btn.click(
+            fn=log_study_session,
+            inputs=[hours_input, tasks_completed],
+            outputs=log_output
+)
 
-        with gr.Tab("Weekly Insights"):
-            summary_btn = gr.Button("Generate Weekly Summary")
-            summary_output = gr.Markdown()
+        
+        with gr.Tab("Calendar"):
+            calendar_tab()
 
+        with gr.Tab("Motivation"):
 
-    # Load homepage values
+            # ---- Page Title ----
+            gr.Markdown("<div class='motivation-title'>STUDY MOTIVATION</div>")
+
+            # ---- Quote Placeholder ----
+            motivation_quote = gr.Markdown(
+                "<div class='motivation-quote'>Your motivational quote will appear here...</div>"
+            )
+
+            refresh_quote_btn = gr.Button("🔄 Refresh Quote", elem_classes="nav-btn")
+
+            gr.Markdown("<hr style='border:1px solid #444; margin-top:20px;'>")
+
+           
+
+            # ---- Deadline List Placeholder ----
+            deadlines_list = gr.Markdown(
+                "<div class='deadline-list'>Your deadlines will appear here...</div>"
+            )
+
+            
+    
+    theme_toggle.change(
+            fn=switch_theme,
+            inputs=theme_toggle,
+            outputs=css_box,
+        )
+    
+    
     demo.load(
-        load_dashboard,
-        inputs=None,
-        outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
-    )
+    fn=load_dashboard,
+    inputs=None,
+    outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
+)
+
+
 
 demo.launch()
