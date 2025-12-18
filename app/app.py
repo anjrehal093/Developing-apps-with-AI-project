@@ -8,7 +8,7 @@ from backend import (
     generate_quote,
     save_study_plan,
     generate_quick_insights,
-    load_study_plan,
+    get_next_task,
     load_habit_data,
     log_study_session,
     calculate_total_hours,
@@ -17,7 +17,34 @@ from backend import (
     complete_current_task
 )
 from calendar_module import calendar_tab
+import matplotlib.pyplot as plt
+from backend import get_study_hours_by_task
 
+def render_donut_chart():
+    data = get_study_hours_by_task()
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+
+    if not data:
+        ax.text(0.5, 0.5, "No study data yet",
+                ha="center", va="center", fontsize=12)
+        ax.axis("off")
+        return fig
+
+    labels = list(data.keys())
+    values = list(data.values())
+
+    ax.pie(
+        values,
+        labels=labels,
+        autopct="%1.0f%%",
+        startangle=90,
+        wedgeprops=dict(width=0.4)
+    )
+
+    ax.set_title("Study Time Breakdown")
+
+    return fig
 
 
 
@@ -35,13 +62,12 @@ def load_dashboard():
         hours_html = f"<div class='kpi-box'>Hours Studied<br><b>{total_hours}</b></div>"
         streak_html = f"<div class='kpi-box'>Study Streak<br><b>{streak} days</b></div>"
 
-        plan_data = load_study_plan()
-
-        if plan_data:
-            next_task = plan_data.get("next_task")
+        next_task = get_next_task()
+        donut = render_donut_chart()
+        if next_task:
             task_html = (
                 f"<div class='next-task'>"
-                f" Your next task:<br><b>{next_task}</b>"
+                f"Your next task:<br><b>{next_task}</b>"
                 f"</div>"
             )
         else:
@@ -52,7 +78,8 @@ def load_dashboard():
             )
 
 
-        return quote_html, hours_html, streak_html, task_html
+
+        return quote_html, hours_html, streak_html, task_html, donut
 # -------------------------
 # App Layout
 # -------------------------
@@ -70,6 +97,7 @@ light_css = load_css("Light")
 def switch_theme(choice):
     css = light_css if choice == "Light" else dark_css
     return f"<style>{css}</style>"
+
 
 
 
@@ -115,9 +143,8 @@ with gr.Blocks() as demo:
                     gr.Markdown(
                         "<div style='color:white; font-size:20px; margin-bottom:10px;'>Progress Donut</div>"
                     )
-                    donut_placeholder = gr.Markdown(
-                        "<div style='color:white;'> Donut chart will appear here (Tasks Completed vs Tasks Left)</div>"
-                    )
+                    donut_plot = gr.Plot(label="Study Breakdown")
+
 
             # NEXT TASK BOX
             next_task_box = gr.Markdown(
@@ -143,7 +170,7 @@ with gr.Blocks() as demo:
                 refresh_dashboard_btn.click(
                 fn=load_dashboard,
                 inputs=None,
-                outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
+                outputs=[quote_box, kpi_hours, kpi_streak, next_task_box,donut_plot]
             )
 
                 quote_btn = gr.Button("🔄 Refresh Quote", elem_classes="nav-btn")
@@ -159,7 +186,7 @@ with gr.Blocks() as demo:
         # -----------------------------------------
         with gr.Tab("Study Planner"):
 
-            gr.Markdown("<div class='planner-title'>STUDY PLANNER</div>")
+            gr.Markdown("## STUDY PLANNER")
 
             # ---- Add Task UI ----
             new_task = gr.Textbox(label="Add a Task")
@@ -196,20 +223,28 @@ with gr.Blocks() as demo:
             difficulty = gr.Dropdown(["Easy", "Medium", "Hard"])
             style = gr.Dropdown(["Pomodoro", "Deep Work", "Short Sessions"])
              # ---- Deadline Input Section ----
-            gr.Markdown("<div class='deadline-title'>ADD A DEADLINE</div>")
+            gr.Markdown("### ADD A DEADLINE")
+
 
             deadline_name = gr.Textbox(label="Deadline Name (e.g., Maths Exam)")
             deadline_date = gr.Textbox(label="Deadline Date (YYYY-MM-DD HH:MM)")
 
-            add_deadline_btn = gr.Button("➕ Add Deadline", elem_classes="nav-btn")
+           
 
             generate_btn = gr.Button("Generate Plan", elem_classes="nav-btn")
             plan_output = gr.Markdown()
 
             # Function to combine tasks for the LLM (later)
-            def prepare_plan(task_list, hours, diff, style, deadline):
+            def prepare_plan(task_list, hours, diff, style, deadline_name, deadline_date):
+                print("DEBUG prepare_plan called")
+                print("tasks:", task_list)
+                print("hours:", hours)
+                print("difficulty:", diff)
+                print("style:", style)
+                print("deadline_name:", deadline_name)
+                print("deadline_date:", deadline_date)
                 if not task_list:
-                    return " Add at least 1 task before generating a plan."
+                    return "Add at least 1 task before generating a plan."
 
                 tasks_joined = "\n".join(task_list)
 
@@ -217,35 +252,57 @@ with gr.Blocks() as demo:
                     plan = generate_study_plan(tasks_joined, hours, diff, style)
                 except Exception as e:
                     print("LLM ERROR:", e)
-                    plan = " AI plan generation failed. Tasks saved anyway."
+                    return "AI plan generation failed."
 
-                save_study_plan(plan, task_list,deadline)
+                save_study_plan(
+                    plan_text=plan,
+                    tasks=task_list,
+                    hours=hours,
+                    study_style=style,
+                    deadline={
+                        "name": deadline_name or "Deadline",
+                        "date": deadline_date
+                    }
+                )
+
                 return plan
             generate_btn.click(
-                fn=prepare_plan,
-                inputs=[task_list_state, time_input, difficulty, style, deadline_date],
-                outputs=plan_output
-            ).then(
-                fn=load_dashboard,
-                inputs=None,
-                outputs=[quote_box, kpi_hours, kpi_streak, next_task_box]
-            )
+                    fn=prepare_plan,
+                    inputs=[
+                        task_list_state,
+                        time_input,
+                        difficulty,
+                        style,
+                        deadline_name,
+                        deadline_date
+                    ],
+                    outputs=plan_output
+                )
+
 
 
         with gr.Tab("Habit Tracker"):
             hours_input = gr.Slider(0, 6, label="Hours Studied")
-            tasks_completed = gr.Slider(0, 10, label="Tasks Completed")
+            task_input = gr.Textbox(
+        label="Task Studied",
+        placeholder="e.g. maths"
+    )
+
             log_btn = gr.Button("Log Session")
             log_output = gr.Markdown()
             log_btn.click(
             fn=log_study_session,
-            inputs=[hours_input, tasks_completed],
+            inputs=[hours_input, task_input],
             outputs=log_output
 )
 
         
         with gr.Tab("Calendar"):
             calendar_tab()
+           
+            
+
+
 
         with gr.Tab("Motivation"):
 
